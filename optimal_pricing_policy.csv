@@ -1,0 +1,13 @@
+State,Optimal_Price_Multiplier
+Medium_Night,0.8
+Medium_Evening,1.0
+Medium_Afternoon,0.8
+Very High_Afternoon,0.8
+High_Afternoon,0.8
+Very High_Evening,1.5
+Very High_Night,1.2
+Very High_Morning,1.2
+High_Morning,0.8
+High_Night,0.8
+Medium_Morning,0.8
+High_Evening,1.0
