@@ -1,9 +1,11 @@
+"""
+FastAPI Backend for RideSurge RL
+All logic follows RL.ipynb exactly.
+"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import numpy as np
-import random
-from environment import RideSharingEnv
+from environment import RideEnv
 from rl_agent import QLearningAgent
 
 app = FastAPI()
@@ -16,11 +18,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-env = RideSharingEnv()
+# Initialize environment and agent
+env = RideEnv()
 agent = QLearningAgent(env)
 
+
 class TrainRequest(BaseModel):
-    episodes: int = 1000
+    episodes: int = 500
+
 
 class SimulateRequest(BaseModel):
     steps: int = 1
@@ -29,125 +34,154 @@ class SimulateRequest(BaseModel):
     time_val: int = None
     traffic_val: int = None
 
+
 @app.post("/train")
 def train_model(req: TrainRequest):
+    """Train the Q-learning agent and return metrics + benchmark"""
     metrics = agent.train(episodes=req.episodes)
-    
-    # Run a quick 1000-step benchmark post-training
-    state, _ = env.reset()
-    rl_revenue, static_revenue, rl_accepted, static_accepted = 0, 0, 0, 0
-    
-    for _ in range(1000):
-        action = agent.act(state, exploit_only=True)
-        next_state, reward, term, trunc, info = env.step(action)
-        
-        if random.random() < 0.8:
-            static_revenue += info["base_fare"]
-            static_accepted += 1
-            
-        if info["accepted"]:
-            rl_revenue += info["base_fare"] * info["multiplier"]
-            rl_accepted += 1
-            
-        state = next_state
-        if term or trunc:
-            state, _ = env.reset()
-            
+
+    # Evaluate RL vs Static (from RL.ipynb cell 15)
+    rl_result = agent.evaluate(use_rl=True)
+    static_result = agent.evaluate(use_rl=False)
+
     benchmark = {
-        "rl_utilization": round((rl_accepted / 1000) * 100, 1),
-        "static_utilization": round((static_accepted / 1000) * 100, 1),
-        "rl_revenue": round(rl_revenue, 2),
-        "static_revenue": round(static_revenue, 2)
+        "rl_revenue": round(float(rl_result), 2),
+        "static_revenue": round(float(static_result), 2),
+        "rl_utilization": round(float(rl_result) / max(1, float(static_result)) * 100, 1),
+        "static_utilization": 100.0,
     }
     return {"message": "Training Complete", "metrics": metrics, "benchmark": benchmark}
 
+
 @app.post("/reset")
 def reset_table():
+    """Reset the Q-table and the environment"""
     agent.reset_table()
-    return {"message": "Q-Table Reset successfully"}
+    env.reset()
+    return {"message": "Environment and Q-Table reset successfully"}
+
 
 @app.post("/simulate")
 def simulate(req: SimulateRequest):
+    """Run a simulation and return pricing history"""
     history = []
-    
+
     # Custom simulation parameters provided
     if req.riders is not None and req.drivers is not None:
         ds_ratio = req.riders / (req.drivers + 1)
-        ds_level = 0 if ds_ratio < 1.0 else (1 if ds_ratio < 2.0 else (2 if ds_ratio < 3.0 else 3))
+        t = req.time_val if req.time_val is not None else 1
+        tr = req.traffic_val if req.traffic_val is not None else 1
+
+        state = (float(format(ds_ratio, '.1f')), t, tr)
+        action, q_vals = agent.predict_multiplier(state)
+
+        # Calculate expected results for this single state point (manual sliders)
+        from environment import demand_adjustment
+        adj_demand = demand_adjustment(req.riders, action)
+        if action > 2.0:
+            adj_demand *= 0.7  # cancellation factor
+        rides = min(adj_demand, req.drivers)
         
-        t = req.time_val if req.time_val is not None else random.randint(0, 3)
-        tr = req.traffic_val if req.traffic_val is not None else random.randint(0, 2)
+        # Revenue and Wait logic influenced by Time/Traffic
+        traffic_multi = {0: 1.0, 1: 1.25, 2: 1.6}.get(tr, 1.0)   # Traffic scales wait time
+        time_multi = {0: 1.1, 1: 1.0, 2: 1.15}.get(t, 1.0)      # Peak times scale revenue baseline
         
-        state_idx = env._get_state_index(ds_level, t, tr)
-        action, multiplier, q_vals = agent.predict_multiplier(state_idx)
+        revenue = rides * env.base_price * action * time_multi
         
-        t_str = ["Morning", "Afternoon", "Evening", "Night"][t]
+        # Static baseline for this single scenario
+        st_adj = demand_adjustment(req.riders, 1.0)
+        st_rides = min(st_adj, req.drivers)
+        st_revenue = st_rides * env.base_price * 1.0 * time_multi
+
+        wait_time = (max(0, adj_demand - req.drivers) + (50 * tr)) * traffic_multi
+
+        slot_names = ["Morning", "Afternoon", "Evening"]
+        t_str = slot_names[t] if 0 <= t < len(slot_names) else "Unknown"
+        traffic_names = ["Low", "Medium", "High"]
+        tr_str = traffic_names[tr] if 0 <= tr < len(traffic_names) else "Unknown"
+
         return {
             "simulation": {
-                "state_idx": state_idx,
-                "recommended_multiplier": multiplier,
+                "state": str(state),
+                "recommended_multiplier": action,
                 "q_values": q_vals,
-                "explanation": f"High demand bridging {t_str} + low drivers (India peak hours)" if ds_level > 1 else "Normal baseline volume"
+                "revenue": float(format(revenue, '.2f')),
+                "static_revenue": float(format(st_revenue, '.2f')),
+                "rides": float(format(rides, '.1f')),
+                "wait_time": float(format(wait_time, '.1f')),
+                "utilization": float(format((rides / max(1, req.drivers)) * 100, '.1f')),
+                "explanation": f"Custom scenario during {t_str} with {tr_str} traffic."
             }
         }
-        
+
     # Free-running simulation using internal dataset
-    state, _ = env.reset()
-    rl_revenue = 0
-    static_revenue = 0
-    wait_time_sum = 0
-    acceptances = 0
-    
-    for _ in range(req.steps):
-        action = agent.act(state, exploit_only=True)
-        # 1.0 multiplier action is idx 1
-        static_action = 1
-        
-        # We need info for calculating static revenue
-        curr_info = env.state_info
-        static_fare = curr_info['Base_Fare']
-        static_prob = max(0.1, min(0.99, 0.8))
-        if random.random() < static_prob:
-            static_revenue += static_fare
-            
-        next_state, reward, terminated, truncated, info = env.step(action)
+    state = env.reset()
+    rl_revenue = 0.0
+    static_revenue = 0.0
+    wait_time_sum = 0.0
+    total_rides = 0.0
+    done = False
+    step_count = 0
+
+    while not done and step_count < req.steps:
+        # RL agent action
+        action = agent.choose_action(state, exploit_only=True)
+
+        # Static baseline (multiplier 1.0)
+        row = env.df.iloc[env.t]
+        from environment import demand_adjustment
+        st_demand = row["demand"]
+        st_drivers = row["drivers"]
+        st_adjusted = demand_adjustment(st_demand, 1.0)
+        st_rides = min(st_adjusted, st_drivers)
+        static_revenue += st_rides * env.base_price * 1.0
+
+        # RL step
+        next_state, reward, done, info = env.step(action)
+
         history.append({
-            "step": _,
-            "ds_ratio": info["ds_ratio"],
+            "step": step_count,
             "multiplier": info["multiplier"],
-            "reward": reward,
-            "wait_time": info["wait_time"],
-            "time_val": info["time_val"],
-            "traffic_val": info["traffic_val"],
-            "q_values": agent.q_table[state, :].tolist()
+            "reward": round(info["reward"], 2),
+            "wait_time": round(info["wait_time"], 2),
+            "time_val": info["time_slot"],
+            "traffic_val": info["traffic"],
+            "ds_ratio": {"riders": int(info["demand"]), "drivers": int(info["drivers"])},
+            "q_values": {str(a): agent.get_q(state, a) for a in agent.actions},
         })
-        
-        if info["accepted"]:
-            rl_revenue += info["base_fare"] * info["multiplier"]
-            wait_time_sum += info["wait_time"]
-            acceptances += 1
-            
+
+        rl_revenue += info["revenue"]
+        wait_time_sum += info["wait_time"]
+        total_rides += info["rides"]
+
         state = next_state
-        if terminated or truncated:
-            state, _ = env.reset()
-            
+        step_count += 1
+
+        if done:
+            state = env.reset()
+            done = False  # allow continuing if more steps requested
+
     return {
         "history": history,
         "summary": {
-            "rl_revenue": rl_revenue,
-            "static_revenue": static_revenue,
-            "avg_wait_time": wait_time_sum / max(1, acceptances),
-            "utilization": acceptances / req.steps * 100
+            "rl_revenue": round(rl_revenue, 2),
+            "static_revenue": round(static_revenue, 2),
+            "avg_wait_time": round(wait_time_sum / max(1, step_count), 2),
+            "utilization": round(total_rides / max(1, step_count), 1),
         }
     }
 
+
 @app.get("/status")
 def status():
-    non_zero = np.count_nonzero(agent.q_table)
-    total = agent.q_table.size
+    """Return Q-table stats"""
     return {
-        "q_table_sparsity": f"{(total - non_zero) / total * 100:.2f}%",
-        "total_states": agent.n_states,
-        "n_actions": agent.n_actions,
-        "epsilon": agent.epsilon
+        "q_table_entries": len(agent.Q),
+        "total_actions": len(agent.actions),
+        "actions": agent.actions,
+        "epsilon": agent.epsilon,
+        "alpha": agent.alpha,
+        "gamma": agent.gamma,
+        "dataset_size": len(env.df),
+        "base_price": round(env.base_price, 2),
     }

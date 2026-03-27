@@ -4,11 +4,23 @@ import Controls from './components/Controls';
 import ComparisonChart from './components/ComparisonChart';
 import { useStore } from './store/useStore';
 import { motion } from 'framer-motion';
-import { Download, RefreshCw, Moon, Sun, MonitorPlay } from 'lucide-react';
+import { Download, RefreshCw, MonitorPlay } from 'lucide-react';
 
 
 function App() {
-  const { multiplier, rlRevenue, avgWaitTime, utilization, theme, setTheme, history } = useStore();
+  const { multiplier, rlRevenue, avgWaitTime, utilization, history, updateStats } = useStore();
+
+  const handleReset = async () => {
+    try {
+        const res = await fetch('http://localhost:8000/reset', { method: 'POST' });
+        const data = await res.json();
+        updateStats({ rlRevenue: 0, staticRevenue: 0, globalRlRevenue: 0, globalStaticRevenue: 0, avgWaitTime: 0, utilization: 0, history: [] });
+        alert(data.message);
+    } catch (error) {
+        console.error('Reset failed:', error);
+        alert('Failed to reset environment.');
+    }
+  };
 
   const handleExportCSV = () => {
     if(!history.length) return alert('No simulation history to export.');
@@ -28,7 +40,7 @@ function App() {
   };
 
   return (
-    <div className={`min-h-screen font-sans ${theme === 'dark' ? 'bg-[#050505] text-white' : 'bg-white text-zinc-950'} transition-colors duration-500`}>
+    <div className="min-h-screen font-sans bg-[#050505] text-white">
       <div className="max-w-[1400px] mx-auto p-4 md:p-8">
         
         {/* Header */}
@@ -45,10 +57,7 @@ function App() {
                 </p>
             </div>
             <div className="flex gap-3 mt-4 md:mt-0">
-                <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2.5 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg hover:text-white transition-colors">
-                    {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
-                </button>
-                <button className="flex items-center gap-2 text-sm px-4 py-2.5 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-red-400 rounded-lg transition-colors font-medium">
+                <button onClick={handleReset} className="flex items-center gap-2 text-sm px-4 py-2.5 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-red-400 rounded-lg transition-colors font-medium">
                     <RefreshCw size={16}/> Reset Env
                 </button>
                 <button onClick={handleExportCSV} className="flex items-center gap-2 text-sm px-5 py-2.5 border border-zinc-700 bg-zinc-800/80 backdrop-blur text-zinc-100 hover:border-zinc-500 rounded-lg transition-colors font-medium relative group overflow-hidden">

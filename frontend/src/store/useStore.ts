@@ -15,16 +15,16 @@ interface RideState {
   multiplier: number;
   rlRevenue: number;
   staticRevenue: number;
+  globalRlRevenue: number;
+  globalStaticRevenue: number;
   avgWaitTime: number;
   utilization: number;
   history: Record<string, unknown>[];
   isSimulationRunning: boolean;
-  theme: 'dark' | 'light';
   benchmark: BenchmarkData | null;
   
   setControls: (controls: Partial<RideState>) => void;
   updateStats: (stats: Partial<RideState>) => void;
-  setTheme: (theme: 'dark' | 'light') => void;
   setBenchmark: (benchmark: BenchmarkData) => void;
 }
 
@@ -36,15 +36,15 @@ export const useStore = create<RideState>((set) => ({
   multiplier: 1.0,
   rlRevenue: 0,
   staticRevenue: 0,
+  globalRlRevenue: 0,
+  globalStaticRevenue: 0,
   avgWaitTime: 0,
   utilization: 0,
   history: [],
   isSimulationRunning: false,
-  theme: 'dark',
   benchmark: null,
   
   setControls: (controls) => set((state) => ({ ...state, ...controls })),
   updateStats: (stats) => set((state) => ({ ...state, ...stats })),
-  setTheme: (theme) => set({ theme }),
   setBenchmark: (benchmark) => set({ benchmark }),
 }));

@@ -16,19 +16,22 @@ const Controls = () => {
             });
             
             if (predRes.data.simulation) {
+                const s = predRes.data.simulation;
                 updateStats({ 
-                    multiplier: predRes.data.simulation.recommended_multiplier
+                    multiplier: s.recommended_multiplier,
+                    rlRevenue: s.revenue,
+                    staticRevenue: s.static_revenue,
+                    avgWaitTime: s.wait_time,
+                    utilization: s.utilization
                 });
             }
 
+            // Still run the global simulation for the chart but only update the history
             const batchRes = await axios.post('/api/simulate', { steps: 24 });
-            const s = batchRes.data.summary;
             updateStats({
                 history: batchRes.data.history,
-                rlRevenue: s.rl_revenue,
-                staticRevenue: s.static_revenue,
-                avgWaitTime: s.avg_wait_time,
-                utilization: s.utilization
+                globalRlRevenue: batchRes.data.summary.rl_revenue,
+                globalStaticRevenue: batchRes.data.summary.static_revenue,
             });
 
         } catch (e) {

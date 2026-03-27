@@ -8,7 +8,7 @@ import { useStore } from '../store/useStore';
 const TrainingPanel = () => {
     const [isTraining, setIsTraining] = useState(false);
     const [progress, setProgress] = useState(0);
-    const [metrics, setMetrics] = useState<Array<{ name: string; Reward: number; WaitTime: number }>>([]);
+    const [metrics, setMetrics] = useState<Array<{ name: string; Reward: number; WaitTime?: number }>>([]);
 
     const startTraining = async () => {
         setIsTraining(true);
@@ -31,8 +31,7 @@ const TrainingPanel = () => {
             const m = res.data.metrics;
             const formatted = m.rewards.map((_: number, i: number) => ({
                 name: `Ep ${i}`,
-                Reward: Math.round(m.rewards[i]),
-                WaitTime: Math.round(m.wait_times[i])
+                Reward: Math.round(m.rewards[i])
             }));
             setMetrics(formatted);
         } catch (err) {

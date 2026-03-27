@@ -7,13 +7,39 @@ const BenchmarkResults = () => {
 
     if (!benchmark) {
         return (
-            <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-2xl p-8 flex flex-col items-center justify-center text-center h-[400px]">
-                <Target size={40} className="text-zinc-700 mb-4" />
-                <h3 className="text-xl font-bold text-zinc-400">No Benchmark Data</h3>
-                <p className="text-sm text-zinc-500 mt-2 max-w-sm">
-                    Train the RL model to generate a dynamic comparison between the trained Q-learning policy and baseline static pricing over 1,000 simulated Indian rides.
-                </p>
-            </div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-zinc-900/60 p-8 rounded-2xl border border-zinc-800/80 border-dashed relative overflow-hidden group">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 opacity-50"/>
+                
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+                    <div className="flex-1 text-center md:text-left">
+                        <div className="inline-flex p-3 bg-zinc-800 rounded-xl mb-4 border border-zinc-700 shadow-inner">
+                            <Target size={24} className="text-zinc-500 animate-pulse" />
+                        </div>
+                        <h3 className="text-2xl font-black text-zinc-200 tracking-tight">Post-Training Benchmark</h3>
+                        <p className="text-zinc-500 text-sm mt-2 max-w-sm leading-relaxed">
+                            A rigorous 1,000-step validation will appear here once the model is trained. It benchmarks the <span className="text-zinc-400 font-bold">RL Policy</span> against <span className="text-zinc-400 font-bold">Static Pricing</span>.
+                        </p>
+                    </div>
+                    
+                    <div className="w-full md:w-auto flex flex-col gap-3 opacity-30 blur-[1px] grayscale pointer-events-none select-none">
+                        <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 w-48">
+                            <div className="w-12 h-2 bg-zinc-600 rounded mb-3"/>
+                            <div className="w-24 h-6 bg-zinc-500 rounded font-mono font-black text-xs flex items-center px-2">$---,---</div>
+                        </div>
+                        <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700 w-48">
+                            <div className="w-16 h-2 bg-zinc-600 rounded mb-3"/>
+                            <div className="w-20 h-6 bg-zinc-500 rounded font-mono font-black text-xs flex items-center px-2">--.-%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 flex justify-center md:justify-start relative z-10">
+                     <div className="px-4 py-2 bg-zinc-800/80 border border-zinc-700 rounded-lg text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                         <div className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-pulse" />
+                         Analysis Engine Standby
+                     </div>
+                </div>
+            </motion.div>
         );
     }
 
